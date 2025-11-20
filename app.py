@@ -27,8 +27,8 @@ DEST_ACCOUNT = {
 }
 
 NOTEBOOKS = [
-    {"source_slug": "shreevathsbbhh/new-19-1", "notebook_name": "new-19-1", "dest_slug": "distinct4exist/new-19-1"},
-    {"source_slug": "shreevathsbbhh/new-19-2", "notebook_name": "new-19-2", "dest_slug": "distinct4exist/new-19-2"}
+    {"source_slug": "shreevathsbbhh/new-20-1", "notebook_name": "new-20-1", "dest_slug": "distinct4exist/new-20-1"},
+    {"source_slug": "shreevathsbbhh/new-20-2", "notebook_name": "new-20-2", "dest_slug": "distinct4exist/new-20-2"}
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════
