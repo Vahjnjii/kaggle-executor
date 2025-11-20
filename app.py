@@ -26,9 +26,11 @@ DEST_ACCOUNT = {
     "key": "c2767798395ca8c007e931d6f9d42752"
 }
 
+# Added "new-21" to the list below
 NOTEBOOKS = [
     {"source_slug": "shreevathsbbhh/new-20-1", "notebook_name": "new-20-1", "dest_slug": "distinct4exist/new-20-1"},
-    {"source_slug": "shreevathsbbhh/new-20-2", "notebook_name": "new-20-2", "dest_slug": "distinct4exist/new-20-2"}
+    {"source_slug": "shreevathsbbhh/new-20-2", "notebook_name": "new-20-2", "dest_slug": "distinct4exist/new-20-2"},
+    {"source_slug": "shreevathsbbhh/new-21",   "notebook_name": "new-21",   "dest_slug": "distinct4exist/new-21"}
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════
