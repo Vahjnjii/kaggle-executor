@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Kaggle Notebook Executor - Single File Version
+Kaggle Notebook Executor - Fixed Single File
 Runs every 3 minutes via cron-job.org
-Deploy to Render.com for free hosting
 """
 
 import os
@@ -12,20 +11,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 import shutil
-
-# Install dependencies on first run
-def install_dependencies():
-    try:
-        import flask
-        import kaggle
-    except ImportError:
-        print("📦 Installing dependencies...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "flask", "kaggle", "gunicorn"])
-        print("✅ Dependencies installed")
-
-install_dependencies()
-
-from flask import Flask, jsonify
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -47,6 +32,18 @@ NOTEBOOKS = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════
+# FLASK SETUP (import early, before kaggle)
+# ═══════════════════════════════════════════════════════════════════════════
+
+try:
+    from flask import Flask, jsonify
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "flask"])
+    from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+# ═══════════════════════════════════════════════════════════════════════════
 # CORE FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -55,7 +52,8 @@ def log(msg, symbol="ℹ️"):
     print(f"[{timestamp}] {symbol} {msg}")
     sys.stdout.flush()
 
-def setup_kaggle(account):
+def setup_kaggle_auth(account):
+    """Setup Kaggle authentication - must be called before importing kaggle"""
     kaggle_dir = Path.home() / ".kaggle"
     kaggle_dir.mkdir(exist_ok=True)
     kaggle_json = kaggle_dir / "kaggle.json"
@@ -84,10 +82,11 @@ def execute_notebook(nb):
     log("═" * 70, "")
     
     temp_dir = Path(f"./temp_{nb['notebook_name']}")
+    original_dir = os.getcwd()
     
     try:
         # Step 1: Pull from source
-        setup_kaggle(SOURCE_ACCOUNT)
+        setup_kaggle_auth(SOURCE_ACCOUNT)
         
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
@@ -127,9 +126,8 @@ def execute_notebook(nb):
         log(f"Metadata updated: {nb['notebook_name']}-{timestamp}", "📝")
         
         # Step 3: Push to destination
-        setup_kaggle(DEST_ACCOUNT)
+        setup_kaggle_auth(DEST_ACCOUNT)
         
-        original_dir = os.getcwd()
         os.chdir(temp_dir)
         
         log("Pushing to destination...", "📤")
@@ -194,10 +192,8 @@ def execute_all():
     }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# FLASK WEB SERVER
+# FLASK ROUTES
 # ═══════════════════════════════════════════════════════════════════════════
-
-app = Flask(__name__)
 
 @app.route('/')
 def home():
@@ -227,4 +223,8 @@ def health():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     log(f"🌐 Starting server on port {port}", "")
+    
+    # Create kaggle config on startup to prevent import errors
+    setup_kaggle_auth(SOURCE_ACCOUNT)
+    
     app.run(host='0.0.0.0', port=port, debug=False)
