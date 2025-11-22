@@ -33,6 +33,8 @@ jobs:
         from pathlib import Path
         import shutil
         from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        import time
 
         SOURCE_ACCOUNT = {
             "username": "shreevathsbbhh",
@@ -71,68 +73,81 @@ jobs:
             }
         ]
 
+        log_lock = threading.Lock()
+
         def log(msg, symbol="ℹ️"):
             timestamp = datetime.utcnow().strftime('%H:%M:%S')
-            print(f"[{timestamp}] {symbol} {msg}")
-            sys.stdout.flush()
+            with log_lock:
+                print(f"[{timestamp}] {symbol} {msg}")
+                sys.stdout.flush()
 
-        def setup_kaggle_auth(account, kaggle_dir):
-            kaggle_dir.mkdir(exist_ok=True, parents=True)
+        def setup_kaggle_auth(account):
+            kaggle_dir = Path.home() / ".kaggle"
+            kaggle_dir.mkdir(exist_ok=True)
             kaggle_json = kaggle_dir / "kaggle.json"
             
             with open(kaggle_json, 'w') as f:
                 json.dump({"username": account["username"], "key": account["key"]}, f)
             
             kaggle_json.chmod(0o600)
-            return str(kaggle_dir)
+            log(f"Auth set: {account['username']}", "🔑")
 
-        def run_cmd(cmd, timeout=120, env=None):
+        def run_cmd(cmd, timeout=180):
             try:
                 result = subprocess.run(
                     cmd, shell=True, capture_output=True, 
-                    text=True, timeout=timeout, env=env
+                    text=True, timeout=timeout
                 )
                 return result.returncode == 0, result.stdout, result.stderr
             except subprocess.TimeoutExpired:
-                return False, "", "Timeout"
+                return False, "", "Command timeout after 180s"
             except Exception as e:
                 return False, "", str(e)
 
         def execute_notebook(nb):
-            log(f"📓 START: {nb['notebook_name']} → {nb['dest_account']}", "🚀")
+            log(f"START: {nb['notebook_name']} → {nb['dest_account']}", "🚀")
             
             temp_dir = Path(f"./temp_{nb['notebook_name']}")
-            kaggle_config_dir = temp_dir / ".kaggle"
             original_dir = os.getcwd()
             
             try:
+                # Clean temp directory
                 if temp_dir.exists():
                     shutil.rmtree(temp_dir)
                 temp_dir.mkdir()
                 
-                # Setup environment with isolated kaggle config
-                kaggle_home = setup_kaggle_auth(SOURCE_ACCOUNT, kaggle_config_dir)
-                env = os.environ.copy()
-                env['KAGGLE_CONFIG_DIR'] = kaggle_home
+                # STEP 1: Pull from source
+                setup_kaggle_auth(SOURCE_ACCOUNT)
+                time.sleep(0.5)  # Give filesystem time to update
                 
-                log(f"Pulling: {nb['notebook_name']}", "📥")
+                log(f"Pulling {nb['notebook_name']}...", "📥")
                 success, stdout, stderr = run_cmd(
-                    f"kaggle kernels pull {nb['source_slug']} -p {temp_dir} -m",
-                    env=env
+                    f"kaggle kernels pull {nb['source_slug']} -p {temp_dir} -m"
                 )
                 
                 if not success:
-                    log(f"Pull FAILED: {nb['notebook_name']} - {stderr[:150]}", "❌")
+                    log(f"PULL FAILED: {nb['notebook_name']}", "❌")
+                    log(f"Error: {stderr[:300]}", "")
+                    log(f"Output: {stdout[:300]}", "")
                     return False
+                
+                log(f"Pull OK: {nb['notebook_name']}", "✅")
+                
+                # STEP 2: Verify files exist
+                files = list(temp_dir.glob("*"))
+                log(f"Files pulled: {[f.name for f in files]}", "📄")
                 
                 metadata_file = temp_dir / "kernel-metadata.json"
                 
                 if not metadata_file.exists():
-                    log(f"Metadata missing: {nb['notebook_name']}", "❌")
+                    log(f"MISSING metadata: {nb['notebook_name']}", "❌")
                     return False
                 
+                # STEP 3: Update metadata
                 with open(metadata_file, 'r') as f:
                     metadata = json.load(f)
+                
+                log(f"Original metadata: {metadata.get('id', 'N/A')}", "📝")
                 
                 timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
                 
@@ -145,32 +160,41 @@ jobs:
                 with open(metadata_file, 'w') as f:
                     json.dump(metadata, f, indent=2)
                 
+                log(f"Updated to: {metadata['id']}", "📝")
+                
+                # STEP 4: Switch to destination account
                 target_account_key = nb.get('dest_account')
                 if target_account_key not in DEST_ACCOUNTS:
                     log(f"Unknown account: {target_account_key}", "❌")
                     return False
                 
-                # Re-setup auth for destination account
-                kaggle_home = setup_kaggle_auth(DEST_ACCOUNTS[target_account_key], kaggle_config_dir)
-                env['KAGGLE_CONFIG_DIR'] = kaggle_home
+                setup_kaggle_auth(DEST_ACCOUNTS[target_account_key])
+                time.sleep(0.5)  # Give filesystem time to update
                 
+                # STEP 5: Push to destination
                 os.chdir(temp_dir)
                 
-                log(f"Pushing: {nb['notebook_name']}", "📤")
-                success, stdout, stderr = run_cmd("kaggle kernels push", env=env)
+                log(f"Pushing {nb['notebook_name']}...", "📤")
+                success, stdout, stderr = run_cmd("kaggle kernels push", timeout=240)
                 
                 os.chdir(original_dir)
                 
                 if not success:
-                    log(f"Push FAILED: {nb['notebook_name']} - {stderr[:150]}", "❌")
+                    log(f"PUSH FAILED: {nb['notebook_name']}", "❌")
+                    log(f"Error: {stderr[:300]}", "")
+                    log(f"Output: {stdout[:300]}", "")
                     return False
                 
-                log(f"SUCCESS: {nb['notebook_name']} ✅", "🎉")
+                log(f"Push OK: {nb['notebook_name']}", "✅")
+                log(f"URL: https://www.kaggle.com/code/{nb['dest_slug']}", "🔗")
                 
                 return True
                 
             except Exception as e:
-                log(f"ERROR: {nb['notebook_name']} - {str(e)[:150]}", "❌")
+                log(f"EXCEPTION: {nb['notebook_name']}", "❌")
+                log(f"Error: {str(e)[:300]}", "")
+                import traceback
+                log(f"Trace: {traceback.format_exc()[:500]}", "")
                 return False
                 
             finally:
@@ -179,38 +203,38 @@ jobs:
                 if temp_dir.exists():
                     try:
                         shutil.rmtree(temp_dir)
-                    except:
-                        pass
+                    except Exception as cleanup_error:
+                        log(f"Cleanup warning: {str(cleanup_error)[:100]}", "⚠️")
 
         def execute_all():
             start = datetime.utcnow()
-            log(f"🚀 PARALLEL EXECUTION STARTED: {start.isoformat()}", "")
-            log(f"📊 Total notebooks: {len(NOTEBOOKS)}", "")
+            log(f"EXECUTION STARTED: {start.isoformat()}", "🚀")
+            log(f"Total notebooks: {len(NOTEBOOKS)}", "📊")
             
             results = {}
             
-            with ThreadPoolExecutor(max_workers=len(NOTEBOOKS)) as executor:
-                future_to_nb = {executor.submit(execute_notebook, nb): nb for nb in NOTEBOOKS}
-                
-                for future in as_completed(future_to_nb):
-                    nb = future_to_nb[future]
-                    try:
-                        result = future.result()
-                        results[nb['notebook_name']] = result
-                    except Exception as e:
-                        log(f"Exception for {nb['notebook_name']}: {str(e)}", "❌")
-                        results[nb['notebook_name']] = False
+            # Execute sequentially to avoid auth conflicts
+            for nb in NOTEBOOKS:
+                log("═" * 70, "")
+                success = execute_notebook(nb)
+                results[nb['notebook_name']] = success
+                time.sleep(2)  # Wait between notebooks
             
             success_count = sum(results.values())
             duration = (datetime.utcnow() - start).total_seconds()
             
             log("═" * 70, "")
-            log(f"✅ COMPLETED: {success_count}/{len(results)} successful | {duration:.1f}s", "")
+            log(f"COMPLETED: {success_count}/{len(results)} successful | {duration:.1f}s", "")
             log("═" * 70, "")
             
             for nb_name, success in results.items():
                 status = "✅" if success else "❌"
                 log(f"{status} {nb_name}", "")
+            
+            # Exit with error if any failed
+            if success_count < len(results):
+                log(f"FAILURES DETECTED: {len(results) - success_count} notebooks failed", "❌")
+                sys.exit(1)
 
         execute_all()
         EOF
