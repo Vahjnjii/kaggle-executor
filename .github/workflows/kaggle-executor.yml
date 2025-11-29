@@ -51,6 +51,10 @@ jobs:
             }
         }
 
+        # UPDATED CONFIGURATION:
+        # 1. new-20-1 (shreevathsaz)
+        # 2. war-2    (distinct4exist)
+        # 3. war-1    (distinct4exist) <-- CHANGED from war-3
         NOTEBOOKS = [
             {
                 "source_slug": "shreevathsbbhh/new-20-1", 
@@ -65,9 +69,9 @@ jobs:
                 "dest_account": "distinct4exist"
             },
             {
-                "source_slug": "shreevathsbbhh/war-3",   
-                "notebook_name": "war-3",   
-                "dest_slug": "distinct4exist/war-3-v2",  # Changed slug to fix 403 error
+                "source_slug": "shreevathsbbhh/war-1",   
+                "notebook_name": "war-1",   
+                "dest_slug": "distinct4exist/war-1",
                 "dest_account": "distinct4exist"
             }
         ]
@@ -150,9 +154,13 @@ jobs:
                 
                 timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
                 
+                # We split the dest_slug to get the pure slug name (e.g., 'war-1')
+                # This ensures the 'slug' field in JSON matches the ID field's URL structure
+                new_slug = nb['dest_slug'].split('/')[-1]
+                
                 metadata.update({
                     'id': nb['dest_slug'],
-                    'slug': nb['dest_slug'].split('/')[-1], # Ensure slug matches dest ID
+                    'slug': new_slug,
                     'title': f"{nb['notebook_name']}-{timestamp}"
                 })
                 
