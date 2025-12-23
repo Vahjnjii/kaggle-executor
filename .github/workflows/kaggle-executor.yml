@@ -22,9 +22,9 @@ jobs:
       run: |
         pip install kaggle
     
-    - name: Execute notebooks in parallel
+    - name: Execute notebooks
       run: |
-        python << 'EOF'
+        python << 'PYEOF'
         import os
         import subprocess
         import json
@@ -32,7 +32,6 @@ jobs:
         from datetime import datetime
         from pathlib import Path
         import shutil
-        import threading
         import time
 
         SOURCE_ACCOUNT = {
@@ -41,207 +40,197 @@ jobs:
         }
 
         DEST_ACCOUNTS = {
-            "distinct4exist": {
-                "username": "distinct4exist",
-                "key": "c2767798395ca8c007e931d6f9d42752"
-            },
-            "shreevathsaz": {
-                "username": "shreevathsaz",
-                "key": "2faa3199cb4f8a0d88a8999604ac6770"
+            "vathsamm": {
+                "username": "vathsamm",
+                "key": "33fad3a4dc6d92aa70fa90b62b9ebef4"
             }
         }
 
-        # UPDATED CONFIGURATION:
-        # 1. new-20-1 (shreevathsaz)
-        # 2. war-2    (distinct4exist)
-        # 3. war-1    (distinct4exist) <-- CHANGED from war-3
+        # 1 NOTEBOOK → vathsamm (long-google-tts)
         NOTEBOOKS = [
             {
-                "source_slug": "shreevathsbbhh/new-20-1", 
-                "notebook_name": "new-20-1", 
-                "dest_slug": "shreevathsaz/new-20-1",
-                "dest_account": "shreevathsaz"
-            },
-            {
-                "source_slug": "shreevathsbbhh/war-2", 
-                "notebook_name": "war-2", 
-                "dest_slug": "distinct4exist/war-2",
-                "dest_account": "distinct4exist"
-            },
-            {
-                "source_slug": "shreevathsbbhh/war-1",   
-                "notebook_name": "war-1",   
-                "dest_slug": "distinct4exist/war-1",
-                "dest_account": "distinct4exist"
+                "source_slug": "shreevathsbbhh/long-google-tts", 
+                "notebook_name": "long-google-tts", 
+                "dest_slug": "vathsamm/long-google-tts",
+                "dest_account": "vathsamm"
             }
         ]
 
-        log_lock = threading.Lock()
-
         def log(msg, symbol="ℹ️"):
             timestamp = datetime.utcnow().strftime('%H:%M:%S')
-            with log_lock:
-                print(f"[{timestamp}] {symbol} {msg}")
-                sys.stdout.flush()
+            print(f"[{timestamp}] {symbol} {msg}")
+            sys.stdout.flush()
 
         def setup_kaggle_auth(account):
             kaggle_dir = Path.home() / ".kaggle"
             kaggle_dir.mkdir(exist_ok=True)
             kaggle_json = kaggle_dir / "kaggle.json"
-            
             with open(kaggle_json, 'w') as f:
                 json.dump({"username": account["username"], "key": account["key"]}, f)
-            
             kaggle_json.chmod(0o600)
             log(f"Auth set: {account['username']}", "🔑")
 
         def run_cmd(cmd, timeout=180):
             try:
-                result = subprocess.run(
-                    cmd, shell=True, capture_output=True, 
-                    text=True, timeout=timeout
-                )
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
                 return result.returncode == 0, result.stdout, result.stderr
             except subprocess.TimeoutExpired:
-                return False, "", "Command timeout after 180s"
+                return False, "", "Timeout"
             except Exception as e:
                 return False, "", str(e)
 
         def execute_notebook(nb):
             log(f"START: {nb['notebook_name']} → {nb['dest_account']}", "🚀")
             
-            temp_dir = Path(f"./temp_{nb['notebook_name']}")
+            source_dir = Path(f"./source_{nb['notebook_name']}")
+            dest_dir = Path(f"./dest_{nb['notebook_name']}")
             original_dir = os.getcwd()
             
             try:
-                # Clean temp directory
-                if temp_dir.exists():
-                    shutil.rmtree(temp_dir)
-                temp_dir.mkdir()
+                # Clean directories
+                for d in [source_dir, dest_dir]:
+                    if d.exists():
+                        shutil.rmtree(d)
+                    d.mkdir()
                 
-                # STEP 1: Pull from source
+                target_account_key = nb['dest_account']
+                dest_account = DEST_ACCOUNTS[target_account_key]
+                
+                # STEP 1: Pull from DESTINATION first (to get correct id_no and metadata)
+                setup_kaggle_auth(dest_account)
+                time.sleep(0.3)
+                
+                log(f"Pulling destination metadata: {nb['dest_slug']}...", "📥")
+                success, stdout, stderr = run_cmd(f"kaggle kernels pull {nb['dest_slug']} -p {dest_dir} -m")
+                
+                dest_exists = success
+                if dest_exists:
+                    log(f"Destination kernel exists", "✅")
+                else:
+                    log(f"Destination kernel doesn't exist, will create new", "🆕")
+                
+                # STEP 2: Pull notebook code from SOURCE
                 setup_kaggle_auth(SOURCE_ACCOUNT)
-                time.sleep(0.5)  # Give filesystem time to update
+                time.sleep(0.3)
                 
-                log(f"Pulling {nb['notebook_name']}...", "📥")
-                success, stdout, stderr = run_cmd(
-                    f"kaggle kernels pull {nb['source_slug']} -p {temp_dir} -m"
-                )
+                log(f"Pulling source code: {nb['source_slug']}...", "📥")
+                success, stdout, stderr = run_cmd(f"kaggle kernels pull {nb['source_slug']} -p {source_dir} -m")
                 
                 if not success:
-                    log(f"PULL FAILED: {nb['notebook_name']}", "❌")
-                    log(f"Error: {stderr[:300]}", "")
-                    log(f"Output: {stdout[:300]}", "")
+                    log(f"SOURCE PULL FAILED: {stderr[:300]}", "❌")
                     return False
                 
-                log(f"Pull OK: {nb['notebook_name']}", "✅")
+                log(f"Source pull OK", "✅")
                 
-                # STEP 2: Verify files exist
-                files = list(temp_dir.glob("*"))
-                log(f"Files pulled: {[f.name for f in files]}", "📄")
-                
-                metadata_file = temp_dir / "kernel-metadata.json"
-                
-                if not metadata_file.exists():
-                    log(f"MISSING metadata: {nb['notebook_name']}", "❌")
+                # Find the notebook file in source
+                source_notebooks = list(source_dir.glob("*.ipynb"))
+                if not source_notebooks:
+                    log(f"No notebook found in source", "❌")
                     return False
                 
-                # STEP 3: Update metadata
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
+                source_notebook = source_notebooks[0]
+                log(f"Source notebook: {source_notebook.name}", "📄")
                 
-                log(f"Original metadata: {metadata.get('id', 'N/A')}", "📝")
+                # STEP 3: Prepare final metadata
+                if dest_exists:
+                    # Use destination's metadata (has correct id_no)
+                    dest_metadata_file = dest_dir / "kernel-metadata.json"
+                    with open(dest_metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                    log(f"Using dest metadata: id={metadata.get('id')}, id_no={metadata.get('id_no')}", "📝")
+                    
+                    # Copy source notebook to dest directory with correct name
+                    dest_notebook_name = metadata.get('code_file', f"{nb['notebook_name']}.ipynb")
+                    shutil.copy(source_notebook, dest_dir / dest_notebook_name)
+                    
+                    # Update code_file reference if needed
+                    metadata['code_file'] = dest_notebook_name
+                    
+                    with open(dest_metadata_file, 'w') as f:
+                        json.dump(metadata, f, indent=2)
+                    
+                    push_dir = dest_dir
+                else:
+                    # CREATE NEW KERNEL - set id to destination slug
+                    source_metadata_file = source_dir / "kernel-metadata.json"
+                    with open(source_metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                    
+                    # FIX: Set id to dest_slug (REQUIRED for new kernels)
+                    metadata['id'] = nb['dest_slug']
+                    metadata.pop('id_no', None)
+                    metadata['slug'] = nb['notebook_name']
+                    metadata['title'] = nb['notebook_name']
+                    metadata['code_file'] = source_notebook.name
+                    
+                    with open(source_metadata_file, 'w') as f:
+                        json.dump(metadata, f, indent=2)
+                    
+                    log(f"New kernel metadata: id={metadata['id']}, slug={metadata['slug']}", "📝")
+                    push_dir = source_dir
                 
-                timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+                # STEP 4: Push to destination
+                setup_kaggle_auth(dest_account)
+                time.sleep(0.3)
                 
-                # We split the dest_slug to get the pure slug name (e.g., 'war-1')
-                # This ensures the 'slug' field in JSON matches the ID field's URL structure
-                new_slug = nb['dest_slug'].split('/')[-1]
+                os.chdir(push_dir)
+                log(f"Directory contents: {[f.name for f in Path('.').glob('*')]}", "📂")
                 
-                metadata.update({
-                    'id': nb['dest_slug'],
-                    'slug': new_slug,
-                    'title': f"{nb['notebook_name']}-{timestamp}"
-                })
-                
-                with open(metadata_file, 'w') as f:
-                    json.dump(metadata, f, indent=2)
-                
-                log(f"Updated to: {metadata['id']}", "📝")
-                
-                # STEP 4: Switch to destination account
-                target_account_key = nb.get('dest_account')
-                if target_account_key not in DEST_ACCOUNTS:
-                    log(f"Unknown account: {target_account_key}", "❌")
-                    return False
-                
-                setup_kaggle_auth(DEST_ACCOUNTS[target_account_key])
-                time.sleep(0.5)  # Give filesystem time to update
-                
-                # STEP 5: Push to destination
-                os.chdir(temp_dir)
-                
-                log(f"Pushing {nb['notebook_name']}...", "📤")
+                log(f"Pushing...", "📤")
                 success, stdout, stderr = run_cmd("kaggle kernels push", timeout=240)
                 
                 os.chdir(original_dir)
                 
                 if not success:
-                    log(f"PUSH FAILED: {nb['notebook_name']}", "❌")
-                    log(f"Error: {stderr[:300]}", "")
-                    log(f"Output: {stdout[:300]}", "")
+                    log(f"PUSH FAILED", "❌")
+                    log(f"Stderr: {stderr}", "")
+                    log(f"Stdout: {stdout}", "")
                     return False
                 
                 log(f"Push OK: {nb['notebook_name']}", "✅")
                 log(f"URL: https://www.kaggle.com/code/{nb['dest_slug']}", "🔗")
-                
                 return True
                 
             except Exception as e:
-                log(f"EXCEPTION: {nb['notebook_name']}", "❌")
-                log(f"Error: {str(e)[:300]}", "")
+                log(f"EXCEPTION: {str(e)}", "❌")
                 import traceback
-                log(f"Trace: {traceback.format_exc()[:500]}", "")
+                traceback.print_exc()
                 return False
                 
             finally:
                 if os.getcwd() != original_dir:
                     os.chdir(original_dir)
-                if temp_dir.exists():
-                    try:
-                        shutil.rmtree(temp_dir)
-                    except Exception as cleanup_error:
-                        log(f"Cleanup warning: {str(cleanup_error)[:100]}", "⚠️")
+                for d in [source_dir, dest_dir]:
+                    if d.exists():
+                        shutil.rmtree(d, ignore_errors=True)
 
         def execute_all():
             start = datetime.utcnow()
             log(f"EXECUTION STARTED: {start.isoformat()}", "🚀")
             log(f"Total notebooks: {len(NOTEBOOKS)}", "📊")
+            log(f"Destination: vathsamm", "🎯")
             
             results = {}
             
-            # Execute sequentially to avoid auth conflicts
             for nb in NOTEBOOKS:
-                log("═" * 70, "")
+                log("═" * 60, "")
                 success = execute_notebook(nb)
                 results[nb['notebook_name']] = success
-                time.sleep(2)  # Wait between notebooks
+                
+                log("Waiting 60 seconds before next action...", "⏳")
+                time.sleep(60)
             
             success_count = sum(results.values())
             duration = (datetime.utcnow() - start).total_seconds()
             
-            log("═" * 70, "")
-            log(f"COMPLETED: {success_count}/{len(results)} successful | {duration:.1f}s", "")
-            log("═" * 70, "")
+            log("═" * 60, "")
+            log(f"COMPLETED: {success_count}/{len(results)} | {duration:.1f}s", "🏁")
             
             for nb_name, success in results.items():
-                status = "✅" if success else "❌"
-                log(f"{status} {nb_name}", "")
+                log(f"{'✅' if success else '❌'} {nb_name}", "")
             
-            # Exit with error if any failed
             if success_count < len(results):
-                log(f"FAILURES DETECTED: {len(results) - success_count} notebooks failed", "❌")
                 sys.exit(1)
 
         execute_all()
-        EOF
+        PYEOF
