@@ -40,25 +40,25 @@ jobs:
         }
 
         DEST_ACCOUNTS = {
-            "shreevathsbbhh": {
-                "username": "shreevathsbbhh",
-                "key": "83a92caa96ed51b5d5a9a730100c57aa"
+            "vathsamm": {
+                "username": "vathsamm",
+                "key": "33fad3a4dc6d92aa70fa90b62b9ebef4"
             }
         }
 
-        # 2 NOTEBOOKS → shreevathsbbhh (same source and destination)
+        # 2 NOTEBOOKS → vathsamm
         NOTEBOOKS = [
             {
                 "source_slug": "shreevathsbbhh/long-google-tts-4", 
                 "notebook_name": "long-google-tts-4", 
-                "dest_slug": "shreevathsbbhh/long-google-tts-4",
-                "dest_account": "shreevathsbbhh"
+                "dest_slug": "vathsamm/long-google-tts-4",
+                "dest_account": "vathsamm"
             },
             {
                 "source_slug": "shreevathsbbhh/king-main-15", 
                 "notebook_name": "king-main-15", 
-                "dest_slug": "shreevathsbbhh/king-main-15",
-                "dest_account": "shreevathsbbhh"
+                "dest_slug": "vathsamm/king-main-15",
+                "dest_account": "vathsamm"
             }
         ]
 
@@ -214,7 +214,7 @@ jobs:
             start = datetime.utcnow()
             log(f"EXECUTION STARTED: {start.isoformat()}", "🚀")
             log(f"Total notebooks: {len(NOTEBOOKS)}", "📊")
-            log(f"Destination: shreevathsbbhh", "🎯")
+            log(f"Destination: vathsamm", "🎯")
             
             results = {}
             
