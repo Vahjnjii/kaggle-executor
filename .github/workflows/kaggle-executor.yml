@@ -49,15 +49,15 @@ jobs:
         # 2 NOTEBOOKS → vathsamm
         NOTEBOOKS = [
             {
-                "source_slug": "shreevathsbbhh/long-google-tts-4", 
-                "notebook_name": "long-google-tts-4", 
-                "dest_slug": "vathsamm/long-google-tts-4",
+                "source_slug": "shreevathsbbhh/long-google-tts-5", 
+                "notebook_name": "long-google-tts-5", 
+                "dest_slug": "vathsamm/long-google-tts-5",
                 "dest_account": "vathsamm"
             },
             {
-                "source_slug": "shreevathsbbhh/king-main-15", 
-                "notebook_name": "king-main-15", 
-                "dest_slug": "vathsamm/king-main-15",
+                "source_slug": "shreevathsbbhh/king-main-16", 
+                "notebook_name": "king-main-16", 
+                "dest_slug": "vathsamm/king-main-16",
                 "dest_account": "vathsamm"
             }
         ]
