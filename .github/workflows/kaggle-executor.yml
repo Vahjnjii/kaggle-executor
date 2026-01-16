@@ -55,9 +55,9 @@ jobs:
                 "dest_account": "vathsamm"
             },
             {
-                "source_slug": "shreevathsbbhh/king-main-16", 
-                "notebook_name": "king-main-16", 
-                "dest_slug": "vathsamm/king-main-16",
+                "source_slug": "shreevathsbbhh/king-main-17", 
+                "notebook_name": "king-main-17", 
+                "dest_slug": "vathsamm/king-main-17",
                 "dest_account": "vathsamm"
             }
         ]
