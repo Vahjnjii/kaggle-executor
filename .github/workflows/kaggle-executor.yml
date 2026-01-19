@@ -49,9 +49,9 @@ jobs:
         # 2 NOTEBOOKS → vathsamm
         NOTEBOOKS = [
             {
-                "source_slug": "shreevathsbbhh/long-google-tts-8", 
-                "notebook_name": "long-google-tts-8", 
-                "dest_slug": "vathsamm/long-google-tts-8",
+                "source_slug": "shreevathsbbhh/long-google-tts-9", 
+                "notebook_name": "long-google-tts-9", 
+                "dest_slug": "vathsamm/long-google-tts-9",
                 "dest_account": "vathsamm"
             },
             {
